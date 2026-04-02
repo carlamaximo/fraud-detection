@@ -1,0 +1,38 @@
+# Binários e build local
+/api
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Go workspace / cache
+vendor/
+
+# Cobertura e perf
+*.coverprofile
+coverage.html
+coverage.out
+cpu.prof
+mem.prof
+
+# Ambiente e segredos
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# IDEs e OS
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Logs locais
+*.log
