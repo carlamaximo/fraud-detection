@@ -5,20 +5,15 @@ import (
 	"log/slog"
 	"time"
 
-	"fraud-platform/internal/decision"
 	"fraud-platform/internal/domain"
 	"fraud-platform/internal/logging"
-	"fraud-platform/internal/metrics"
 	"fraud-platform/internal/queue"
+	"fraud-platform/internal/risk"
+	"fraud-platform/internal/stats"
 )
 
-const (
-	maxRetries      = 3
-	componentWorker = "worker"
-	componentDLQ    = "dlq"
-)
+const maxRetries = 3
 
-// Valores ajustáveis em testes (TestMain) para evitar sleeps longos.
 var (
 	processingDelay   = 2 * time.Second
 	retryBackoffDelay = 200 * time.Millisecond
@@ -32,15 +27,10 @@ func StartWorkers(n int) {
 
 func workerLoop(id int) {
 	for event := range queue.EventQueue {
-		logging.L.Info("worker_event_picked_up",
-			slog.String("component", componentWorker),
-			slog.Int("worker_id", id),
-			slog.String("user_id", event.UserID),
-			slog.String("event_type", event.EventType),
-			slog.String("risk_score", "pending"),
-			slog.String("decision", "pending"),
-			slog.Int("retry_count", 0),
-			slog.Bool("dlq", false),
+		logging.L.Info("dequeued",
+			slog.Int("worker", id),
+			slog.String("user", event.UserID),
+			slog.String("type", event.EventType),
 		)
 
 		err := processWithRetries(id, event)
@@ -49,33 +39,24 @@ func workerLoop(id int) {
 			continue
 		}
 
-		logging.L.Info("worker_event_finished",
-			slog.String("component", componentWorker),
-			slog.Int("worker_id", id),
-			slog.String("user_id", event.UserID),
-			slog.Bool("dlq", false),
-		)
+		logging.L.Info("finished", slog.Int("worker", id), slog.String("user", event.UserID))
 	}
 }
 
 func processWithRetries(workerID int, event domain.Event) error {
 	var lastErr error
 	for attempt := 1; attempt <= maxRetries; attempt++ {
-		score, outcome, err := runProcessing(event)
+		score, label, err := runProcessing(event)
 		if err != nil {
 			lastErr = err
-			metrics.IncFailed()
-			logging.L.Info("event_process_attempt_failed",
-				slog.String("component", componentWorker),
-				slog.Int("worker_id", workerID),
-				slog.String("user_id", event.UserID),
-				slog.String("risk_score", "n/a"),
-				slog.String("decision", "n/a"),
-				slog.Int("retry_count", attempt),
-				slog.Bool("dlq", false),
-				slog.String("error", err.Error()),
+			stats.IncFailed()
+			logging.L.Warn("process failed",
+				slog.Int("worker", workerID),
+				slog.String("user", event.UserID),
+				slog.Int("attempt", attempt),
+				slog.String("err", err.Error()),
 			)
-		
+			
 			if attempt < maxRetries {
 				time.Sleep(retryBackoffDelay * time.Duration(attempt))
 			}
@@ -83,50 +64,41 @@ func processWithRetries(workerID int, event domain.Event) error {
 			continue
 		}
 
-		logging.L.Info("event_processed",
-			slog.String("component", componentWorker),
-			slog.Int("worker_id", workerID),
-			slog.String("user_id", event.UserID),
-			slog.Float64("risk_score", score),
-			slog.String("decision", string(outcome)),
-			slog.Int("retry_count", attempt),
-			slog.Bool("dlq", false),
+		logging.L.Info("processed",
+			slog.Int("worker", workerID),
+			slog.String("user", event.UserID),
+			slog.Float64("score", score),
+			slog.String("label", string(label)),
+			slog.Int("attempts", attempt),
 		)
 
-		metrics.RecordSuccessfulProcess(string(outcome))
-
+		stats.RecordSuccessfulProcess(string(label))
 		return nil
 	}
 
 	return lastErr
 }
 
-func runProcessing(event domain.Event) (score float64, outcome decision.Outcome, err error) {
+func runProcessing(event domain.Event) (score float64, label risk.Label, err error) {
 	time.Sleep(processingDelay)
 
 	if event.EventType == "fail_processing" {
-		return 0, "", errors.New("simulated processing failure")
+		return 0, "", errors.New("processing rejected")
 	}
 
 	score = calculateRisk(event)
-	outcome = decision.FromScore(score)
-
-	return score, outcome, nil
+	label = risk.Classify(score)
+	return score, label, nil
 }
 
 func sendToDLQ(workerID int, event domain.Event, err error) {
 	queue.PushDeadLetter(event, err.Error())
-	metrics.IncSentToDLQ()
+	stats.IncSentToDLQ()
 
-	logging.L.Info("event_sent_to_dlq",
-		slog.String("component", componentDLQ),
-		slog.Int("worker_id", workerID),
-		slog.String("user_id", event.UserID),
-		slog.String("risk_score", "n/a"),
-		slog.String("decision", "n/a"),
-		slog.Int("retry_count", maxRetries),
-		slog.Bool("dlq", true),
-		slog.String("reason", err.Error()),
+	logging.L.Error("dlq",
+		slog.Int("worker", workerID),
+		slog.String("user", event.UserID),
+		slog.String("err", err.Error()),
 	)
 }
 

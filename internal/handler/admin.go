@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"fraud-platform/internal/metrics"
 	"fraud-platform/internal/queue"
+	"fraud-platform/internal/stats"
 )
 
 func HandleMetrics(w http.ResponseWriter, r *http.Request) {
@@ -15,7 +15,7 @@ func HandleMetrics(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(metrics.GetSnapshot())
+	_ = json.NewEncoder(w).Encode(stats.GetSnapshot())
 }
 
 func HandleDLQ(w http.ResponseWriter, r *http.Request) {

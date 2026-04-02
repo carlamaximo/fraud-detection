@@ -7,8 +7,8 @@ import (
 
 	"fraud-platform/internal/domain"
 	"fraud-platform/internal/logging"
-	"fraud-platform/internal/metrics"
 	"fraud-platform/internal/queue"
+	"fraud-platform/internal/stats"
 	"fraud-platform/internal/validators"
 
 	playground "github.com/go-playground/validator/v10"
@@ -30,15 +30,7 @@ func HandleEvent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	logging.L.Info("event_received",
-		slog.String("component", "api"),
-		slog.String("user_id", event.UserID),
-		slog.String("event_type", event.EventType),
-		slog.String("risk_score", "pending"),
-		slog.String("decision", "pending"),
-		slog.Int("retry_count", 0),
-		slog.Bool("dlq", false),
-	)
+	logging.L.Info("ingest", slog.String("user", event.UserID), slog.String("type", event.EventType))
 
 	err = validate.Struct(event)
 	if err != nil {
@@ -53,7 +45,7 @@ func HandleEvent(w http.ResponseWriter, r *http.Request) {
 	}
 
 	queue.EventQueue <- event
-	metrics.IncEventsReceived()
+	stats.IncEventsReceived()
 
 	w.WriteHeader(http.StatusAccepted)
 }

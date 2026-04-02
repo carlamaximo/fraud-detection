@@ -8,24 +8,23 @@ import (
 	"testing"
 
 	"fraud-platform/internal/logging"
-	"fraud-platform/internal/metrics"
 	"fraud-platform/internal/queue"
+	"fraud-platform/internal/stats"
 )
 
 func TestMain(m *testing.M) {
 	logging.Init()
-	code := m.Run()
-	os.Exit(code)
+	os.Exit(m.Run())
 }
 
 func resetIntegrationState(t *testing.T) {
 	t.Helper()
-	metrics.Reset()
+	stats.Reset()
 	queue.ResetDLQ()
 	queue.DrainEventQueue()
 	t.Cleanup(func() {
 		queue.DrainEventQueue()
-		metrics.Reset()
+		stats.Reset()
 		queue.ResetDLQ()
 	})
 }
@@ -91,8 +90,8 @@ func TestHandleEvent(t *testing.T) {
 			t.Fatalf("status = %d", rec.Code)
 		}
 
-		if metrics.GetSnapshot().TotalEventsReceived != 1 {
-			t.Fatal("metric TotalEventsReceived not incremented")
+		if stats.GetSnapshot().TotalEventsReceived != 1 {
+			t.Fatal("TotalEventsReceived not incremented")
 		}
 
 		select {
@@ -100,6 +99,7 @@ func TestHandleEvent(t *testing.T) {
 			if ev.UserID != "u1" {
 				t.Fatalf("queued user_id = %q", ev.UserID)
 			}
+			
 		default:
 			t.Fatal("expected event in queue")
 		}

@@ -1,7 +1,8 @@
-package metrics
+package stats
 
 import "sync"
 
+// Snapshot is JSON for GET /metrics (field names are stable for anyone scraping this).
 type Snapshot struct {
 	TotalEventsReceived uint64 `json:"total_events_received"`
 	TotalProcessed      uint64 `json:"total_processed"`
@@ -55,7 +56,6 @@ func GetSnapshot() Snapshot {
 	return s
 }
 
-// Reset zera todos os contadores. Útil para testes e benches determinísticos.
 func Reset() {
 	mu.Lock()
 	s = Snapshot{}

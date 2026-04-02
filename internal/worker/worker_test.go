@@ -5,11 +5,11 @@ import (
 	"os"
 	"testing"
 
-	"fraud-platform/internal/decision"
 	"fraud-platform/internal/domain"
 	"fraud-platform/internal/logging"
-	"fraud-platform/internal/metrics"
 	"fraud-platform/internal/queue"
+	"fraud-platform/internal/risk"
+	"fraud-platform/internal/stats"
 )
 
 func TestMain(m *testing.M) {
@@ -98,7 +98,7 @@ func TestRunProcessing(t *testing.T) {
 	})
 
 	t.Run("success", func(t *testing.T) {
-		score, outcome, err := runProcessing(domain.Event{
+		score, label, err := runProcessing(domain.Event{
 			UserID: "u", EventType: "signup", IP: "8.8.8.8",
 			Country: "BR", Device: "iphone",
 		})
@@ -106,9 +106,9 @@ func TestRunProcessing(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-
-		if want := decision.FromScore(score); outcome != want {
-			t.Fatalf("outcome %q vs FromScore %q", outcome, want)
+		
+		if want := risk.Classify(score); label != want {
+			t.Fatalf("label %q vs Classify %q", label, want)
 		}
 
 		if score != 0 {
@@ -118,8 +118,8 @@ func TestRunProcessing(t *testing.T) {
 }
 
 func TestProcessWithRetries_success(t *testing.T) {
-	metrics.Reset()
-	t.Cleanup(metrics.Reset)
+	stats.Reset()
+	t.Cleanup(stats.Reset)
 
 	ev := domain.Event{
 		UserID: "u", EventType: "signup", IP: "8.8.8.8",
@@ -130,17 +130,17 @@ func TestProcessWithRetries_success(t *testing.T) {
 		t.Fatalf("processWithRetries: %v", err)
 	}
 
-	s := metrics.GetSnapshot()
+	s := stats.GetSnapshot()
 	if s.TotalProcessed != 1 || s.TotalApproved != 1 {
-		t.Fatalf("metrics: %+v", s)
+		t.Fatalf("stats: %+v", s)
 	}
 }
 
 func TestProcessWithRetries_exhaustsRetries(t *testing.T) {
-	metrics.Reset()
+	stats.Reset()
 	queue.ResetDLQ()
 	t.Cleanup(func() {
-		metrics.Reset()
+		stats.Reset()
 		queue.ResetDLQ()
 	})
 
@@ -149,21 +149,20 @@ func TestProcessWithRetries_exhaustsRetries(t *testing.T) {
 		Country: "BR", Device: "iphone",
 	}
 
-	err := processWithRetries(7, ev)
-	if err == nil {
+	if err := processWithRetries(7, ev); err == nil {
 		t.Fatal("expected error after retries")
 	}
 
-	if got := metrics.GetSnapshot().TotalFailed; got != 3 {
+	if got := stats.GetSnapshot().TotalFailed; got != 3 {
 		t.Fatalf("TotalFailed = %d, want 3", got)
 	}
 }
 
 func TestSendToDLQ(t *testing.T) {
-	metrics.Reset()
+	stats.Reset()
 	queue.ResetDLQ()
 	t.Cleanup(func() {
-		metrics.Reset()
+		stats.Reset()
 		queue.ResetDLQ()
 	})
 
@@ -173,12 +172,12 @@ func TestSendToDLQ(t *testing.T) {
 	}
 	sendToDLQ(2, ev, errors.New("boom"))
 
-	if metrics.GetSnapshot().TotalSentToDLQ != 1 {
-		t.Fatal("expected DLQ metric increment")
+	if stats.GetSnapshot().TotalSentToDLQ != 1 {
+		t.Fatal("expected DLQ stat increment")
 	}
 
 	snap := queue.DeadLettersSnapshot()
 	if len(snap) != 1 || snap[0].Reason != "boom" {
-		t.Fatalf("unexpected DLQ snapshot: %+v", snap)
+		t.Fatalf("DLQ: %+v", snap)
 	}
 }
