@@ -1,6 +1,6 @@
 # Fraud Platform
 
-Asynchronous fraud-style event processing in Go: HTTP ingest, buffered queue, worker pool, simple risk score → **APPROVE / REVIEW / BLOCK**, retries, in-memory DLQ, and JSON endpoints for counters and DLQ inspection.
+Asynchronous fraud event processing in Go: HTTP ingest, buffered queue, worker pool, simple risk score: **APPROVE / REVIEW / BLOCK**, retries, in-memory DLQ, and JSON endpoints for counters and DLQ inspection.
 
 ## What it does
 
