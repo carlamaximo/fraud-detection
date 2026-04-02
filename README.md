@@ -132,7 +132,7 @@ fraud-platform/
 
 ## Limitations
 
-- Queue, DLQ, and stats live in process memory — no persistence or multi-instance safety.  
+- Queue, DLQ, and stats live in process memory, no persistence or multi-instance safety.  
 - No authentication on HTTP endpoints.  
 - Risk rules are illustrative, not a production fraud model.
 
